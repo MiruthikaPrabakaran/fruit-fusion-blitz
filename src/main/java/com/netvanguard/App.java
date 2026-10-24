@@ -1,24 +1,68 @@
 package com.netvanguard;
 
-import com.netvanguard.core.Fruit;
-import com.netvanguard.core.Grid;
-import com.netvanguard.ui.BoardCanvas;
-import com.netvanguard.ui.GameScreen;
+import com.netvanguard.net.Peer;
+import com.netvanguard.net.RelayListener;
+import com.netvanguard.ui.HostLobbyScreen;
+import com.netvanguard.ui.JoinLobbyScreen;
+import com.netvanguard.ui.MenuScreen;
+import com.netvanguard.ui.Navigator;
+import com.netvanguard.ui.PlaceholderGameScreen;
 import javafx.application.Application;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.control.Label;
-import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
-public class App extends Application {
+/** The application window. Owns the single Scene and switches which screen is shown. */
+public class App extends Application implements Navigator {
+    private Scene scene;
+    private Peer currentPeer; // the open network connection, if any
 
     @Override
     public void start(Stage stage) {
-        stage.setScene(new Scene(new GameScreen()));
+        scene = new Scene(new MenuScreen(this), 520, 720);
         stage.setTitle("NetVanguard: Fruit Fusion Blitz");
+        stage.setScene(scene);
         stage.show();
+    }
+
+    @Override
+    public void stop() {
+        closeCurrentPeer(); // closing the window also closes the connection
+    }
+
+    private void closeCurrentPeer() {
+        if (currentPeer != null) {
+            currentPeer.close();
+            currentPeer = null;
+        }
+    }
+
+    @Override
+    public void showMenu() {
+        closeCurrentPeer();
+        scene.setRoot(new MenuScreen(this));
+    }
+
+    @Override
+    public void startSolo() {
+        // TODO: replace with the real GameScreen once the board is ready
+        scene.setRoot(new PlaceholderGameScreen("SOLO", null, null, this));
+    }
+
+    @Override
+    public void showHostLobby() {
+        scene.setRoot(new HostLobbyScreen(this));
+    }
+
+    @Override
+    public void showJoinLobby() {
+        scene.setRoot(new JoinLobbyScreen(this));
+    }
+
+    @Override
+    public void onConnected(Peer peer, RelayListener relay, boolean isHost) {
+        currentPeer = peer;
+        // TODO: replace with the real GameScreen once the board is ready
+        scene.setRoot(new PlaceholderGameScreen(isHost ? "HOST" : "CLIENT", peer, relay, this));
     }
 
     public static void main(String[] args) {
