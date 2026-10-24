@@ -64,8 +64,8 @@ Default port: `5050`.
 - [ ] Merge and chain detection
 - [ ] Scoring and garbage rules
 - [ ] Playable single-player board (keyboard controls, next-item preview)
-- [ ] Host/join over sockets
-- [ ] Opponent grid display, garbage sending/receiving
+- [x] Host/join over sockets
+- [x] Opponent grid display, garbage sending/receiving
 - [ ] Game over and rematch
 - [ ] Polish: warning bar, sound, animations, how-to-play screen
 
