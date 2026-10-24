@@ -7,31 +7,49 @@ import org.junit.jupiter.api.Test;
 
 class GameTest {
 
-    private static Game newGame() {
-        return new Game(new Random(42));
+    /** Remembers everything the game reports. */
+    private static class Recorder implements GameEvents {
+        int garbageSent;
+        int lastScore = -1;
+        int scoreCalls;
+        int gameOverCalls;
+
+        @Override public void onGarbageSent(int count) { garbageSent += count; }
+        @Override public void onScoreChanged(int score) { lastScore = score; scoreCalls++; }
+        @Override public void onGameOver() { gameOverCalls++; }
+    }
+
+    private static Game newGame(Recorder rec) {
+        return new Game(new Random(42), rec);
     }
 
     @Test
     void startsRunningWithAnItemAndAPreview() {
-        Game game = newGame();
+        Game game = newGame(new Recorder());
         assertEquals(Game.State.RUNNING, game.getState());
         assertNotNull(game.getCurrent());
         assertNotNull(game.getNext());
         assertEquals(0, game.getScore());
         assertEquals(0, game.getPendingGarbage());
-        assertEquals(0, game.takeOutgoingGarbage());
+    }
+
+    @Test
+    void worksWithoutAnyListener() {
+        Game game = new Game();
+        game.hardDrop();
+        assertEquals(1, game.getGrid().countItems());
     }
 
     @Test
     void tickMovesTheItemDownOneRow() {
-        Game game = newGame();
+        Game game = newGame(new Recorder());
         game.tick();
         assertEquals(1, game.getCurrent().getRow());
     }
 
     @Test
     void movesLeftAndRight() {
-        Game game = newGame();
+        Game game = newGame(new Recorder());
         int col = game.getCurrent().getCol();
         game.moveLeft();
         assertEquals(col - 1, game.getCurrent().getCol());
@@ -41,7 +59,7 @@ class GameTest {
 
     @Test
     void hardDropLocksItemAtTheBottomAndSpawnsTheNext() {
-        Game game = newGame();
+        Game game = newGame(new Recorder());
         Fruit upcoming = game.getNext();
         game.hardDrop();
         assertNotNull(game.getGrid().get(Grid.ROWS - 1, Grid.COLS / 2));
@@ -52,8 +70,8 @@ class GameTest {
 
     @Test
     void incomingGarbageLandsAfterTheNextDrop() {
-        Game game = newGame();
-        game.addIncomingGarbage(3);
+        Game game = newGame(new Recorder());
+        game.receiveGarbage(3);
         game.hardDrop();
         assertEquals(0, game.getPendingGarbage());
         assertEquals(1 + 3, game.getGrid().countItems());
@@ -61,16 +79,16 @@ class GameTest {
 
     @Test
     void garbageIsCappedPerDrop() {
-        Game game = newGame();
-        game.addIncomingGarbage(10);
+        Game game = newGame(new Recorder());
+        game.receiveGarbage(10);
         game.hardDrop();
         assertEquals(10 - Game.MAX_GARBAGE_PER_DROP, game.getPendingGarbage());
         assertEquals(1 + Game.MAX_GARBAGE_PER_DROP, game.getGrid().countItems());
     }
 
     /** Arranges the grid so the current item causes a chain of 2 (which sends 2 stones). */
-    private static Game gameAboutToChain() {
-        Game game = newGame();
+    private static Game gameAboutToChain(Recorder rec) {
+        Game game = newGame(rec);
         Fruit f = game.getCurrent().getFruit();
         int col = game.getCurrent().getCol();
         game.getGrid().set(9, col, f);
@@ -79,36 +97,52 @@ class GameTest {
     }
 
     @Test
-    void aChainSendsGarbageToTheOpponent() {
-        Game game = gameAboutToChain();
+    void aChainReportsScoreAndSendsGarbage() {
+        Recorder rec = new Recorder();
+        Game game = gameAboutToChain(rec);
         game.hardDrop();
         assertTrue(game.getScore() > 0);
-        assertEquals(2, game.takeOutgoingGarbage());
-        assertEquals(0, game.takeOutgoingGarbage());
+        assertEquals(1, rec.scoreCalls);
+        assertEquals(game.getScore(), rec.lastScore);
+        assertEquals(2, rec.garbageSent);
+    }
+
+    @Test
+    void sendingNothingDoesNotFireTheGarbageEvent() {
+        Recorder rec = new Recorder();
+        Game game = newGame(rec);
+        game.hardDrop();
+        assertEquals(0, rec.garbageSent);
+        assertEquals(0, rec.scoreCalls);
     }
 
     @Test
     void outgoingGarbageCancelsIncomingGarbageFirst() {
-        Game game = gameAboutToChain();
-        game.addIncomingGarbage(3);
+        Recorder rec = new Recorder();
+        Game game = gameAboutToChain(rec);
+        game.receiveGarbage(3);
         game.hardDrop();
-        assertEquals(0, game.takeOutgoingGarbage()); // 2 sent, 2 cancelled
+        assertEquals(0, rec.garbageSent); // 2 earned, 2 cancelled
         assertEquals(0, game.getPendingGarbage());
         assertEquals(1 + 1, game.getGrid().countItems()); // merged fruit + the 1 stone that got through
     }
 
     @Test
-    void gameEndsWhenSomethingSitsInTheTopRow() {
-        Game game = newGame();
+    void gameEndsOnceWhenSomethingSitsInTheTopRow() {
+        Recorder rec = new Recorder();
+        Game game = newGame(rec);
         game.getGrid().set(0, 0, Fruit.STONE);
         game.hardDrop();
         assertTrue(game.isGameOver());
         assertNull(game.getCurrent());
+        game.hardDrop();
+        game.tick();
+        assertEquals(1, rec.gameOverCalls);
     }
 
     @Test
     void nothingChangesAfterGameOver() {
-        Game game = newGame();
+        Game game = newGame(new Recorder());
         game.getGrid().set(0, 0, Fruit.STONE);
         game.hardDrop();
         int items = game.getGrid().countItems();

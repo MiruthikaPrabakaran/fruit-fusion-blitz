@@ -3,11 +3,17 @@ package com.netvanguard.core;
 import java.util.Random;
 
 /**
- * One player's game: the grid, the current and next item, the score and the garbage queues.
+ * One player's game: the grid, the current and next item, the score and the garbage queue.
  *
- * Pure logic, no JavaFX. The UI calls tick() on a timer and the move methods on key presses.
- * Networking (later) uses takeOutgoingGarbage() to send stones and addIncomingGarbage() when
- * stones arrive. Call everything from one thread (the JavaFX thread, via Platform.runLater).
+ * Pure logic: no JavaFX and nothing from the net package. The outside world is told what
+ * happened through {@link GameEvents}:
+ *   onScoreChanged(score)  - the score went up
+ *   onGarbageSent(count)   - I earned stones for the opponent (after cancelling incoming ones)
+ *   onGameOver()           - my grid overflowed (called once)
+ * The opponent's stones come in through receiveGarbage(count).
+ *
+ * Events fire on whichever thread calls tick()/hardDrop(). The net code must hop threads
+ * itself (for example Platform.runLater) if it needs to.
  */
 public class Game {
 
@@ -19,23 +25,40 @@ public class Game {
     /** At most this many stones land after one drop; the rest wait in the queue. */
     public static final int MAX_GARBAGE_PER_DROP = Grid.COLS;
 
+    private static final GameEvents NO_EVENTS = new GameEvents() {
+        @Override public void onGarbageSent(int count) { }
+        @Override public void onScoreChanged(int score) { }
+        @Override public void onGameOver() { }
+    };
+
     private final Grid grid = new Grid();
     private final Random rng;
+    private final GameEvents events;
 
     private FallingItem current;
     private Fruit next;
     private int score;
     private int pendingGarbage;   // stones waiting to land on MY grid
-    private int outgoingGarbage;  // stones to send to the OPPONENT
     private MergeResult lastResult = MergeResult.empty();
     private State state = State.RUNNING;
 
+    /** No listener (single-player / practice). */
     public Game() {
-        this(new Random());
+        this(new Random(), NO_EVENTS);
     }
 
+    public Game(GameEvents events) {
+        this(new Random(), events);
+    }
+
+    /** Fixed random source, handy for tests. */
     public Game(Random rng) {
+        this(rng, NO_EVENTS);
+    }
+
+    public Game(Random rng, GameEvents events) {
         this.rng = rng;
+        this.events = events == null ? NO_EVENTS : events;
         this.next = randomFruit();
         spawnNext();
     }
@@ -47,7 +70,7 @@ public class Game {
         if (state != State.RUNNING) {
             return;
         }
-        if (!current.moveDown(grid)) {
+        if (!current.stepDown(grid)) {
             lockCurrent();
         }
     }
@@ -76,20 +99,13 @@ public class Game {
         lockCurrent();
     }
 
-    // ---------- Garbage (used by networking later) ----------
+    // ---------- Garbage ----------
 
     /** The opponent sent stones. They land after my next drop. */
-    public void addIncomingGarbage(int stones) {
-        if (stones > 0) {
-            pendingGarbage += stones;
+    public void receiveGarbage(int count) {
+        if (count > 0) {
+            pendingGarbage += count;
         }
-    }
-
-    /** Stones I earned that still need to be sent. Returns the amount and resets it to 0. */
-    public int takeOutgoingGarbage() {
-        int stones = outgoingGarbage;
-        outgoingGarbage = 0;
-        return stones;
     }
 
     // ---------- State for the UI ----------
@@ -115,13 +131,20 @@ public class Game {
         current = null;
 
         lastResult = MergeResolver.resolve(grid);
-        score += Scoring.points(lastResult);
+        int points = Scoring.points(lastResult);
+        if (points > 0) {
+            score += points;
+            events.onScoreChanged(score);
+        }
 
         // My combo first cancels stones that were about to land on me.
-        int sent = Scoring.garbageFor(lastResult);
-        int cancelled = Math.min(sent, pendingGarbage);
+        int earned = Scoring.garbageFor(lastResult);
+        int cancelled = Math.min(earned, pendingGarbage);
         pendingGarbage -= cancelled;
-        outgoingGarbage += sent - cancelled;
+        int toSend = earned - cancelled;
+        if (toSend > 0) {
+            events.onGarbageSent(toSend);
+        }
 
         int incoming = Math.min(pendingGarbage, MAX_GARBAGE_PER_DROP);
         if (incoming > 0) {
@@ -130,7 +153,7 @@ public class Game {
         }
 
         if (grid.isOverflowing()) {
-            state = State.GAME_OVER;
+            endGame();
         } else {
             spawnNext();
         }
@@ -141,8 +164,16 @@ public class Game {
         next = randomFruit();
         if (!current.canPlace(grid)) {
             current = null;
-            state = State.GAME_OVER;
+            endGame();
         }
+    }
+
+    private void endGame() {
+        if (state == State.GAME_OVER) {
+            return;
+        }
+        state = State.GAME_OVER;
+        events.onGameOver();
     }
 
     private Fruit randomFruit() {

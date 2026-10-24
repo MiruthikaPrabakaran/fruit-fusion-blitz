@@ -59,7 +59,7 @@ class FallingItemTest {
     @Test
     void movesDownOneRow() {
         FallingItem item = new FallingItem(Fruit.CHERRY, 0, 3);
-        assertTrue(item.moveDown(grid));
+        assertTrue(item.stepDown(grid));
         assertEquals(1, item.getRow());
         assertFalse(item.isLanded());
     }
@@ -67,7 +67,7 @@ class FallingItemTest {
     @Test
     void landsOnFloor() {
         FallingItem item = new FallingItem(Fruit.CHERRY, Grid.ROWS - 1, 3);
-        assertFalse(item.moveDown(grid));
+        assertFalse(item.stepDown(grid));
         assertTrue(item.isLanded());
         assertEquals(Grid.ROWS - 1, item.getRow());
     }
@@ -76,8 +76,8 @@ class FallingItemTest {
     void landsOnTopOfOtherItem() {
         grid.set(5, 3, Fruit.GRAPE);
         FallingItem item = new FallingItem(Fruit.CHERRY, 3, 3);
-        assertTrue(item.moveDown(grid)); // row 4
-        assertFalse(item.moveDown(grid)); // blocked by row 5
+        assertTrue(item.stepDown(grid)); // row 4
+        assertFalse(item.stepDown(grid)); // blocked by row 5
         assertTrue(item.isLanded());
         assertEquals(4, item.getRow());
     }
@@ -85,7 +85,7 @@ class FallingItemTest {
     @Test
     void landedItemCannotMove() {
         FallingItem item = new FallingItem(Fruit.CHERRY, Grid.ROWS - 1, 3);
-        item.moveDown(grid);
+        item.stepDown(grid);
         assertFalse(item.moveLeft(grid));
         assertFalse(item.moveRight(grid));
         assertEquals(3, item.getCol());
