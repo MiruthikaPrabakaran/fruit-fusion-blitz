@@ -105,6 +105,27 @@ class NetLoopbackTest {
     }
 
     @Test
+    void relayHoldsEventsUntilATargetIsSetAndKeepsOrder() {
+        RelayListener relay = new RelayListener();
+        relay.onMessage("A");
+        relay.onMessage("B");
+
+        Recorder receiver = new Recorder();
+        relay.setTarget(receiver);
+        assertEquals("A", receiver.messages.poll());
+        assertEquals("B", receiver.messages.poll());
+
+        relay.onMessage("C");
+        assertEquals("C", receiver.messages.poll());
+
+        relay.setTarget(null); // screen switch in progress
+        relay.onMessage("D");
+        assertTrue(receiver.messages.isEmpty());
+        relay.setTarget(receiver);
+        assertEquals("D", receiver.messages.poll());
+    }
+
+    @Test
     void protocolParsing() {
         assertEquals("GARBAGE", Protocol.command("GARBAGE 3"));
         assertEquals("3", Protocol.argument("GARBAGE 3"));

@@ -1,44 +1,68 @@
 package com.netvanguard;
 
-import com.netvanguard.core.Fruit;
-import com.netvanguard.core.Grid;
-import com.netvanguard.ui.BoardCanvas;
+import com.netvanguard.net.Peer;
+import com.netvanguard.net.RelayListener;
+import com.netvanguard.ui.HostLobbyScreen;
+import com.netvanguard.ui.JoinLobbyScreen;
+import com.netvanguard.ui.MenuScreen;
+import com.netvanguard.ui.Navigator;
+import com.netvanguard.ui.PlaceholderGameScreen;
 import javafx.application.Application;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.control.Label;
-import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
-public class App extends Application {
+/** The application window. Owns the single Scene and switches which screen is shown. */
+public class App extends Application implements Navigator {
+    private Scene scene;
+    private Peer currentPeer; // the open network connection, if any
 
     @Override
     public void start(Stage stage) {
-        // Demo grid so you can see the core and ui packages are wired together.
-        // Replace this with the real game once Game/GameLoop exists.
-        Grid demo = new Grid();
-        demo.set(9, 0, Fruit.CHERRY);
-        demo.set(9, 1, Fruit.CHERRY);
-        demo.set(9, 2, Fruit.STRAWBERRY);
-        demo.set(9, 3, Fruit.GRAPE);
-        demo.set(8, 3, Fruit.ORANGE);
-        demo.set(9, 5, Fruit.STONE);
-
-        BoardCanvas board = new BoardCanvas(70);
-        board.draw(demo);
-
-        Label title = new Label("NetVanguard: Fruit Fusion Blitz");
-        title.setStyle("-fx-text-fill: white; -fx-font-size: 22px; -fx-font-weight: bold;");
-
-        VBox root = new VBox(16, title, board);
-        root.setAlignment(Pos.CENTER);
-        root.setPadding(new Insets(20));
-        root.setStyle("-fx-background-color: #111827;");
-
+        scene = new Scene(new MenuScreen(this), 520, 720);
         stage.setTitle("NetVanguard: Fruit Fusion Blitz");
-        stage.setScene(new Scene(root));
+        stage.setScene(scene);
         stage.show();
+    }
+
+    @Override
+    public void stop() {
+        closeCurrentPeer(); // closing the window also closes the connection
+    }
+
+    private void closeCurrentPeer() {
+        if (currentPeer != null) {
+            currentPeer.close();
+            currentPeer = null;
+        }
+    }
+
+    @Override
+    public void showMenu() {
+        closeCurrentPeer();
+        scene.setRoot(new MenuScreen(this));
+    }
+
+    @Override
+    public void startSolo() {
+        // TODO: replace with the real GameScreen once the board is ready
+        scene.setRoot(new PlaceholderGameScreen("SOLO", null, null, this));
+    }
+
+    @Override
+    public void showHostLobby() {
+        scene.setRoot(new HostLobbyScreen(this));
+    }
+
+    @Override
+    public void showJoinLobby() {
+        scene.setRoot(new JoinLobbyScreen(this));
+    }
+
+    @Override
+    public void onConnected(Peer peer, RelayListener relay, boolean isHost) {
+        currentPeer = peer;
+        // TODO: replace with the real GameScreen once the board is ready
+        scene.setRoot(new PlaceholderGameScreen(isHost ? "HOST" : "CLIENT", peer, relay, this));
     }
 
     public static void main(String[] args) {
