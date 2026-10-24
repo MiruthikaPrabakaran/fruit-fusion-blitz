@@ -4,7 +4,7 @@ A real-time, two-player puzzle battle over a local network (desktop GUI, JavaFX)
 
 Each player has their own grid. Drop fruits, match identical ones to merge them into bigger fruits, and score points. A big combo sends **stone blocks** into your opponent's grid in real time. The first grid to overflow loses.
 
-**Authors:** `<your name>`, `<partner's name>`
+**Authors:** `Miruthika Prabakaran`, `Prasharadha Kumar`
 
 ## Tech stack
 
