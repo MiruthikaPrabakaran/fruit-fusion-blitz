@@ -51,7 +51,7 @@ public class FallingItem {
      *
      * @return true if it moved, false if it landed
      */
-    public boolean moveDown(Grid grid) {
+    public boolean stepDown(Grid grid) {
         if (landed) {
             return false;
         }
