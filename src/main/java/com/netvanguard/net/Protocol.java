@@ -34,4 +34,16 @@ public final class Protocol {
     public static String gameOver() {
         return GAME_OVER;
     }
+
+    /** The first word of a received line, e.g. "GARBAGE" for "GARBAGE 3". */
+    public static String command(String line) {
+        int space = line.indexOf(' ');
+        return space < 0 ? line : line.substring(0, space);
+    }
+
+    /** Everything after the first space, e.g. "3" for "GARBAGE 3". Empty string if there is none. */
+    public static String argument(String line) {
+        int space = line.indexOf(' ');
+        return space < 0 ? "" : line.substring(space + 1);
+    }
 }
