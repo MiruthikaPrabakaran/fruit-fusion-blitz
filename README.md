@@ -60,10 +60,10 @@ Default port: `5050`.
 ## Roadmap
 
 - [x] Project skeleton, `Grid`, `Fruit`, protocol constants
-- [ ] Falling item, movement, landing
-- [ ] Merge and chain detection
-- [ ] Scoring and garbage rules
-- [ ] Playable single-player board (keyboard controls, next-item preview)
+- [x] Falling item, movement, landing
+- [x] Merge and chain detection
+- [x] Scoring and garbage rules
+- [x] Playable single-player board (keyboard controls, next-item preview)
 - [x] Host/join over sockets
 - [x] Opponent grid display, garbage sending/receiving
 - [ ] Game over and rematch
