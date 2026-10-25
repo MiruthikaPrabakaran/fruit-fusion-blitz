@@ -9,6 +9,12 @@ import com.netvanguard.net.NetListener;
 import com.netvanguard.net.Peer;
 import com.netvanguard.net.Protocol;
 import com.netvanguard.net.RelayListener;
+import com.netvanguard.core.ScoreBoard;
+import com.netvanguard.core.ScoreStore;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.time.LocalDate;
+import java.util.List;
 import javafx.animation.AnimationTimer;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -48,6 +54,14 @@ public class GameScreen extends StackPane {
     private Game game;
     private long lastTickNanos;
 
+    // Scoreboard (solo only; scoreBoard is null online)
+    private final ScoreBoard scoreBoard;
+    private final Path scoreFile = ScoreStore.defaultPath();
+    private boolean scoreRecorded;
+    private final ScoreboardView scoreboardView = new ScoreboardView();
+    private final Label rankLabel = label("", 18);
+    private final Label bestLabel = label("", 16);
+
     private final Canvas board = new Canvas(Grid.COLS * CELL, Grid.ROWS * CELL);
     private final Canvas preview = new Canvas(PREVIEW, PREVIEW);
     private final Label statusLabel = label("", 14);
@@ -79,6 +93,7 @@ public class GameScreen extends StackPane {
     /** peer and relay are null in solo mode. nav may be null (then there is no Back button). */
     public GameScreen(String mode, Peer peer, RelayListener relay, Navigator nav) {
         online = peer != null;
+        scoreBoard = online ? null : ScoreStore.load(scoreFile);
 
         // The game reports what happens; here we turn that into network messages.
         events = new GameEvents() {
@@ -118,6 +133,12 @@ public class GameScreen extends StackPane {
                 scoreLabel, chainLabel, garbageLabel, controls);
         side.setPadding(new Insets(15));
         side.setPrefWidth(150);
+        if (!online) {
+            bestLabel.setTextFill(Color.web("#fbbf24"));
+            updateBest();
+            scoreboardView.show(scoreBoard.getEntries(), 0);
+            side.getChildren().add(side.getChildren().indexOf(scoreLabel) + 1, bestLabel);
+        }
 
         if (nav != null) {
             Button back = Theme.secondaryButton("Back to menu");
@@ -136,7 +157,12 @@ public class GameScreen extends StackPane {
 
         Label gameOverTitle = label("GAME OVER", 44);
         gameOverTitle.setTextFill(Color.web("#f87171"));
-        gameOverBox.getChildren().addAll(gameOverTitle, finalScoreLabel,
+        rankLabel.setTextFill(Color.web("#fbbf24"));
+        gameOverBox.getChildren().addAll(gameOverTitle, finalScoreLabel);
+        if (!online) {
+            gameOverBox.getChildren().addAll(rankLabel, scoreboardView);
+        }
+        gameOverBox.getChildren().add(
                 label(online ? "Use Back to menu to leave" : "Press R to play again", 18));
         gameOverBox.setAlignment(Pos.CENTER);
         gameOverBox.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
@@ -221,7 +247,32 @@ public class GameScreen extends StackPane {
             return; // restarting mid-match would put the two players out of sync
         }
         game = new Game(events);
+        scoreRecorded = false;
         lastTickNanos = 0;
+    }
+
+    // ---------- Scoreboard ----------
+
+    /** Called once when a solo game ends: adds the score, saves the file, updates the table. */
+    private void recordScore() {
+        scoreRecorded = true;
+        int rank = scoreBoard.add(game.getScore(), LocalDate.now());
+        if (rank > 0) {
+            try {
+                ScoreStore.save(scoreFile, scoreBoard);
+            } catch (IOException e) {
+                // could not save the file; the score still shows for this session
+            }
+        }
+        rankLabel.setText(rank == 1 ? "New high score!"
+                : rank > 0 ? "You made the top 10: #" + rank : "");
+        scoreboardView.show(scoreBoard.getEntries(), rank);
+        updateBest();
+    }
+
+    private void updateBest() {
+        List<ScoreBoard.Entry> entries = scoreBoard.getEntries();
+        bestLabel.setText("Best: " + (entries.isEmpty() ? 0 : entries.get(0).score()));
     }
 
     // ---------- Drawing ----------
@@ -240,6 +291,9 @@ public class GameScreen extends StackPane {
         gameOverBox.setVisible(over);
         if (over) {
             finalScoreLabel.setText("Final score: " + game.getScore());
+            if (!online && !scoreRecorded) {
+                recordScore();
+            }
         }
     }
 
