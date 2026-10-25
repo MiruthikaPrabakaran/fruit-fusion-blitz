@@ -3,7 +3,12 @@ package com.netvanguard.ui;
 import com.netvanguard.core.FallingItem;
 import com.netvanguard.core.Fruit;
 import com.netvanguard.core.Game;
+import com.netvanguard.core.GameEvents;
 import com.netvanguard.core.Grid;
+import com.netvanguard.net.NetListener;
+import com.netvanguard.net.Peer;
+import com.netvanguard.net.Protocol;
+import com.netvanguard.net.RelayListener;
 import javafx.animation.AnimationTimer;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -11,6 +16,7 @@ import javafx.geometry.Pos;
 import javafx.geometry.VPos;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.BorderPane;
@@ -22,48 +28,115 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.text.TextAlignment;
 
 /**
- * The playable board: grid, ghost preview, next-item preview, score, chain/garbage info,
- * keyboard controls and the game-over overlay.
+ * The real game screen. Same constructor as PlaceholderGameScreen so App can swap one for the other.
  *
- * Keys: Left/Right (or A/D) move, Down (or S) soft drop, Space hard drop, R restart.
+ * Solo: peer and relay are null, nothing is sent. Online: my earned garbage and my score are sent
+ * to the opponent through the peer.
+ *
+ * Keys: Left/Right (or A/D) move, Down (or S) soft drop, Space hard drop, R restart (solo only).
+ * The game loop runs only while this screen is on screen, and stops when the app switches away.
  */
 public class GameScreen extends StackPane {
 
-    private static final double CELL = 56;
-    private static final double PREVIEW = 90;
+    private static final double CELL = 48;
+    private static final double PREVIEW = 80;
     private static final Color BOARD_BG = Color.web("#1f2937");
 
-    private Game game = new Game();
+    private final boolean online;
+    private final GameEvents events;
+    private Game game;
     private long lastTickNanos;
 
     private final Canvas board = new Canvas(Grid.COLS * CELL, Grid.ROWS * CELL);
     private final Canvas preview = new Canvas(PREVIEW, PREVIEW);
-    private final Label scoreLabel = label("Score: 0", 22);
+    private final Label statusLabel = label("", 14);
+    private final Label scoreLabel = label("Score: 0", 18);
     private final Label chainLabel = label("", 18);
-    private final Label garbageLabel = label("", 18);
+    private final Label garbageLabel = label("", 16);
     private final Label finalScoreLabel = label("", 22);
     private final VBox gameOverBox = new VBox(12);
 
-    public GameScreen() {
-        setStyle("-fx-background-color: #111827;");
+    private final AnimationTimer timer = new AnimationTimer() {
+        @Override
+        public void handle(long now) {
+            if (lastTickNanos == 0) {
+                lastTickNanos = now;
+            }
+            if (!game.isGameOver() && now - lastTickNanos >= game.tickMillis() * 1_000_000L) {
+                game.tick();
+                lastTickNanos = now;
+            }
+            render();
+        }
+    };
 
+    /** Solo screen with no menu button (handy for quick tests). */
+    public GameScreen() {
+        this("SOLO", null, null, null);
+    }
+
+    /** peer and relay are null in solo mode. nav may be null (then there is no Back button). */
+    public GameScreen(String mode, Peer peer, RelayListener relay, Navigator nav) {
+        online = peer != null;
+
+        // The game reports what happens; here we turn that into network messages.
+        events = new GameEvents() {
+            @Override
+            public void onGarbageSent(int count) {
+                if (peer != null) {
+                    peer.send(Protocol.garbage(count));
+                }
+            }
+
+            @Override
+            public void onScoreChanged(int score) {
+                if (peer != null) {
+                    peer.send(Protocol.score(score));
+                }
+            }
+
+            @Override
+            public void onGameOver() {
+                // nothing to send yet
+            }
+        };
+        game = new Game(events);
+
+        setStyle(Theme.BACKGROUND);
+
+        Label modeLabel = label("Mode: " + mode, 14);
+        modeLabel.setTextFill(Color.web("#9ca3af"));
+        statusLabel.setTextFill(Color.web("#9ca3af"));
         chainLabel.setTextFill(Color.web("#fbbf24"));
         garbageLabel.setTextFill(Color.web("#f87171"));
-        Label controls = label("Left/Right: move\nDown: soft drop\nSpace: hard drop\nR: restart", 14);
+        Label controls = label("Left/Right: move\nDown: soft drop\nSpace: hard drop"
+                + (online ? "" : "\nR: restart"), 12);
         controls.setTextFill(Color.web("#9ca3af"));
 
-        VBox side = new VBox(14, label("NEXT", 18), preview, scoreLabel, chainLabel, garbageLabel, controls);
-        side.setPadding(new Insets(20));
-        side.setPrefWidth(210);
+        VBox side = new VBox(14, modeLabel, statusLabel, label("NEXT", 18), preview,
+                scoreLabel, chainLabel, garbageLabel, controls);
+        side.setPadding(new Insets(15));
+        side.setPrefWidth(150);
+
+        if (nav != null) {
+            Button back = Theme.secondaryButton("Back to menu");
+            back.setFocusTraversable(false); // so Space (hard drop) can never press it
+            back.setMinWidth(0);
+            back.setPrefWidth(120);
+            back.setMaxWidth(120);
+            back.setOnAction(e -> nav.showMenu());
+            side.getChildren().add(back);
+        }
 
         BorderPane layout = new BorderPane();
         layout.setCenter(board);
         layout.setRight(side);
-        BorderPane.setMargin(board, new Insets(20));
+        BorderPane.setMargin(board, new Insets(15));
 
         Label gameOverTitle = label("GAME OVER", 44);
         gameOverTitle.setTextFill(Color.web("#f87171"));
-        gameOverBox.getChildren().addAll(gameOverTitle, finalScoreLabel, label("Press R to play again", 18));
+        gameOverBox.getChildren().addAll(gameOverTitle, finalScoreLabel,
+                label(online ? "Use Back to menu to leave" : "Press R to play again", 18));
         gameOverBox.setAlignment(Pos.CENTER);
         gameOverBox.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
         gameOverBox.setStyle("-fx-background-color: rgba(0, 0, 0, 0.75);");
@@ -73,25 +146,54 @@ public class GameScreen extends StackPane {
 
         setFocusTraversable(true);
         setOnKeyPressed(this::onKey);
+        // Run the loop only while this screen is showing; stop it when the app switches screens.
         sceneProperty().addListener((obs, oldScene, scene) -> {
             if (scene != null) {
+                timer.start();
                 Platform.runLater(this::requestFocus);
+            } else {
+                timer.stop();
             }
         });
 
-        new AnimationTimer() {
-            @Override
-            public void handle(long now) {
-                if (lastTickNanos == 0) {
-                    lastTickNanos = now;
+        if (online) {
+            statusLabel.setText("Opponent connected");
+            relay.setTarget(new NetListener() {
+                @Override
+                public void onConnected() {
+                    // already connected
                 }
-                if (!game.isGameOver() && now - lastTickNanos >= game.tickMillis() * 1_000_000L) {
-                    game.tick();
-                    lastTickNanos = now;
+
+                @Override
+                public void onMessage(String line) {
+                    Platform.runLater(() -> handleNetMessage(line));
                 }
-                render();
-            }
-        }.start();
+
+                @Override
+                public void onDisconnected() {
+                    Platform.runLater(() -> showStatus("Opponent disconnected"));
+                }
+
+                @Override
+                public void onError(String message) {
+                    Platform.runLater(() -> showStatus("Network error: " + message));
+                }
+            });
+        }
+    }
+
+    // ---------- Network ----------
+
+    /** Runs on the JavaFX thread for every message from the opponent. */
+    private void handleNetMessage(String line) {
+        // TODO (next step): parse the line with Protocol and call
+        //   game.receiveGarbage(count)  for a GARBAGE message,
+        //   and show the opponent's score / grid for the others.
+    }
+
+    private void showStatus(String text) {
+        statusLabel.setText(text);
+        statusLabel.setTextFill(Color.web("#f87171"));
     }
 
     // ---------- Input ----------
@@ -114,7 +216,10 @@ public class GameScreen extends StackPane {
     }
 
     private void restart() {
-        game = new Game();
+        if (online) {
+            return; // restarting mid-match would put the two players out of sync
+        }
+        game = new Game(events);
         lastTickNanos = 0;
     }
 
@@ -217,6 +322,7 @@ public class GameScreen extends StackPane {
         Label l = new Label(text);
         l.setTextFill(Color.WHITE);
         l.setFont(Font.font("System", FontWeight.BOLD, size));
+        l.setWrapText(true);
         return l;
     }
 }

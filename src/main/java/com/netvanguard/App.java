@@ -7,6 +7,7 @@ import com.netvanguard.ui.JoinLobbyScreen;
 import com.netvanguard.ui.MenuScreen;
 import com.netvanguard.ui.Navigator;
 import com.netvanguard.ui.PlaceholderGameScreen;
+import com.netvanguard.ui.GameScreen;
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
@@ -44,8 +45,7 @@ public class App extends Application implements Navigator {
 
     @Override
     public void startSolo() {
-        // TODO: replace with the real GameScreen once the board is ready
-        scene.setRoot(new PlaceholderGameScreen("SOLO", null, null, this));
+        scene.setRoot(new GameScreen("SOLO", null, null, this));
     }
 
     @Override
