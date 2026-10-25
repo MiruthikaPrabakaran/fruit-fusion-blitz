@@ -15,8 +15,23 @@ public final class Protocol {
     public static final String STATE = "STATE";
     public static final String SCORE = "SCORE";
     public static final String GAME_OVER = "GAMEOVER";
+    public static final String REMATCH = "REMATCH";
 
     private Protocol() {
+    }
+
+    /** I want to play again. The new match starts when both players have sent this. */
+    public static String rematch() {
+        return REMATCH;
+    }
+
+    /** The argument as a whole number, or 0 if it is missing or not a number. Never negative. */
+    public static int intArgument(String line) {
+        try {
+            return Math.max(0, Integer.parseInt(argument(line).trim()));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     public static String garbage(int count) {
