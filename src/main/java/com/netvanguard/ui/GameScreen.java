@@ -18,6 +18,7 @@ import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.image.Image;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
@@ -288,13 +289,18 @@ public class GameScreen extends StackPane {
         drawFruit(g, game.getNext(), 0, 0, PREVIEW, 1.0);
     }
 
-    /** Bigger fruits are drawn bigger, so a merge visibly "grows". Stones are grey squares. */
+    /** Draws the fruit's picture if there is one (see FruitSprites), otherwise a coloured shape. */
     private static void drawFruit(GraphicsContext g, Fruit fruit, double x, double y, double size, double alpha) {
         Color color = Color.web(fruit.colorHex());
         g.setGlobalAlpha(alpha);
         g.setLineWidth(2);
 
-        if (fruit == Fruit.STONE) {
+        Image sprite = FruitSprites.get(fruit);
+        if (sprite != null) {
+            // Bigger fruits are drawn bigger. Stones fill most of the cell.
+            double diameter = fruit == Fruit.STONE ? size * 0.84 : size * (0.52 + 0.07 * fruit.tier());
+            g.drawImage(sprite, x + (size - diameter) / 2, y + (size - diameter) / 2, diameter, diameter);
+        } else if (fruit == Fruit.STONE) {
             double pad = size * 0.08;
             g.setFill(color);
             g.fillRoundRect(x + pad, y + pad, size - 2 * pad, size - 2 * pad, 12, 12);
