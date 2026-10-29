@@ -24,6 +24,8 @@ public class Game {
 
     /** At most this many stones land after one drop; the rest wait in the queue. */
     public static final int MAX_GARBAGE_PER_DROP = Grid.COLS;
+    /** Each power can be activated at most this many times in one game. */
+    public static final int MAX_POWER_USES_PER_GAME = 3;
 
     private static final GameEvents NO_EVENTS = new GameEvents() {
         @Override public void onGarbageSent(int count) { }
@@ -36,6 +38,7 @@ public class Game {
     private final GameEvents events;
     private final Powers powers = new Powers();
     private int burstsUsed;
+    private int swapsUsed;
 
     private FallingItem current;
     private Fruit next;
@@ -108,7 +111,7 @@ public class Game {
      * Returns false (and keeps the charge) if there is no charge or nothing small to pop.
      */
     public boolean useBurst() {
-        if (state != State.RUNNING || powers.getBursts() == 0) {
+        if (state != State.RUNNING || getBursts() == 0) {
             return false;
         }
         Powers.BurstResult burst = Powers.burst(grid);
@@ -125,9 +128,10 @@ public class Game {
 
     /** SWAP: changes the NEXT fruit to the next kind in SPAWN_POOL. Returns false if no charge is left. */
     public boolean useSwap() {
-        if (state != State.RUNNING || !powers.spendSwap()) {
+        if (state != State.RUNNING || getSwaps() == 0 || !powers.spendSwap()) {
             return false;
         }
+        swapsUsed++;
         int index = 0;
         for (int i = 0; i < SPAWN_POOL.length; i++) {
             if (SPAWN_POOL[i] == next) {
@@ -138,11 +142,21 @@ public class Game {
         return true;
     }
 
-    public int getBursts() { return powers.getBursts(); }
-    public int getSwaps() { return powers.getSwaps(); }
+    /** Available burst charges, hidden from the UI after the per-game use limit is reached. */
+    public int getBursts() {
+        return burstsUsed >= MAX_POWER_USES_PER_GAME ? 0 : powers.getBursts();
+    }
+
+    /** Available swap charges, hidden from the UI after the per-game use limit is reached. */
+    public int getSwaps() {
+        return swapsUsed >= MAX_POWER_USES_PER_GAME ? 0 : powers.getSwaps();
+    }
 
     /** How many bursts have been used this game (lets the UI notice a burst happened). */
     public int getBurstsUsed() { return burstsUsed; }
+
+    /** How many swaps have been used this game. */
+    public int getSwapsUsed() { return swapsUsed; }
 
     // ---------- Garbage ----------
 

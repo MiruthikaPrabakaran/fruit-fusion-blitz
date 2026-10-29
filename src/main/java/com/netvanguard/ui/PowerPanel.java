@@ -19,6 +19,9 @@ public class PowerPanel extends VBox {
     private static final Color ON = Color.web("#60445a");
     private static final Color OFF = Color.web("#b49cab");
     private static final Color GOLD = Color.web("#b7791f");
+    private static final String POWER_ROW_STYLE = "-fx-background-color: #fff8fc;"
+            + " -fx-background-radius: 10; -fx-padding: 7 9 7 9;"
+            + " -fx-border-color: #f0c9dc; -fx-border-radius: 10;";
 
     private final Supplier<Game> game;
     private final Label burstLabel = label("", 14);
@@ -28,15 +31,26 @@ public class PowerPanel extends VBox {
 
     /** game is a supplier because the screen replaces its Game when you restart. */
     public PowerPanel(Supplier<Game> game) {
-        super(6);
+        super(8);
         this.game = game;
+        setPadding(new javafx.geometry.Insets(12));
+        setMaxWidth(190);
+        setStyle("-fx-background-color: linear-gradient(to bottom right, #fff8fc, #fce7f3);"
+                + " -fx-background-radius: 16; -fx-border-color: #e9a6c5;"
+                + " -fx-border-width: 1.5; -fx-border-radius: 16;"
+                + " -fx-effect: dropshadow(gaussian, #d8a7c6, 9, 0.12, 0, 3);");
 
         Label hint = label("B pops cherries and strawberries\nN changes the next fruit", 11);
         hint.setTextFill(OFF);
         messageLabel.setTextFill(GOLD);
+        burstLabel.setStyle(POWER_ROW_STYLE);
+        swapLabel.setStyle(POWER_ROW_STYLE);
         fade.setOnFinished(e -> messageLabel.setText(""));
 
-        getChildren().addAll(label("POWERS", 16), burstLabel, swapLabel, hint, messageLabel);
+        Label title = label("POWERS", 16);
+        title.setStyle("-fx-text-fill: #713f5a; -fx-font-size: 16px; -fx-font-weight: bold;"
+                + " -fx-padding: 0 0 3 0;");
+        getChildren().addAll(title, burstLabel, swapLabel, hint, messageLabel);
     }
 
     /** Updates the counters. Called every frame by GameScreen. */
