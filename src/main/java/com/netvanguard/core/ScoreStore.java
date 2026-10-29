@@ -9,25 +9,25 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Saves and loads a ScoreBoard as a plain text file, one "score,date" line per entry, for example
- * 1240,2026-10-25. The file lives in the user's home folder, so it stays out of the Git repo.
- */
 public final class ScoreStore {
-
     private ScoreStore() {}
 
-    /** C:\Users\you\.fruit-fusion-blitz\scores.txt on Windows. */
     public static Path defaultPath() {
         return Path.of(System.getProperty("user.home"), ".fruit-fusion-blitz", "scores.txt");
     }
 
-    /** Loads the board. A missing or unreadable file gives an empty board; bad lines are skipped. */
+    /** Separate rankings keep scores fair across difficulty levels. */
+    public static Path defaultPath(SoloDifficulty difficulty) {
+        // Keep the existing scoreboard as Medium so current players retain their saved scores.
+        String fileName = difficulty == SoloDifficulty.MEDIUM
+                ? "scores.txt" : "scores-" + difficulty.name().toLowerCase() + ".txt";
+        return Path.of(System.getProperty("user.home"), ".fruit-fusion-blitz", fileName);
+    }
+
+    /** Loads both the old score,date format and the current name,score,date format. */
     public static ScoreBoard load(Path file) {
         ScoreBoard board = new ScoreBoard();
-        if (!Files.isRegularFile(file)) {
-            return board;
-        }
+        if (!Files.isRegularFile(file)) return board;
         List<String> lines;
         try {
             lines = Files.readAllLines(file, StandardCharsets.UTF_8);
@@ -35,28 +35,28 @@ public final class ScoreStore {
             return board;
         }
         for (String line : lines) {
-            String[] parts = line.trim().split(",");
-            if (parts.length != 2) {
-                continue;
-            }
+            String[] parts = line.trim().split(",", 3);
             try {
-                board.add(Integer.parseInt(parts[0].trim()), LocalDate.parse(parts[1].trim()));
+                if (parts.length == 2) {
+                    board.add(Integer.parseInt(parts[0].trim()), LocalDate.parse(parts[1].trim()));
+                } else if (parts.length == 3) {
+                    board.add(parts[0].trim(), Integer.parseInt(parts[1].trim()),
+                            LocalDate.parse(parts[2].trim()));
+                }
             } catch (NumberFormatException | DateTimeParseException e) {
-                // skip the bad line
+                // Ignore malformed rows instead of preventing the game from starting.
             }
         }
         return board;
     }
 
-    /** Writes the board, creating the folder if needed. */
     public static void save(Path file, ScoreBoard board) throws IOException {
         Path parent = file.toAbsolutePath().getParent();
-        if (parent != null) {
-            Files.createDirectories(parent);
-        }
+        if (parent != null) Files.createDirectories(parent);
         List<String> lines = new ArrayList<>();
         for (ScoreBoard.Entry entry : board.getEntries()) {
-            lines.add(entry.score() + "," + entry.date());
+            String safeName = entry.name().replace(",", " ").replace("\n", " ");
+            lines.add(safeName + "," + entry.score() + "," + entry.date());
         }
         Files.write(file, lines, StandardCharsets.UTF_8);
     }

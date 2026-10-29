@@ -1,5 +1,6 @@
 package com.netvanguard.ui;
 
+import com.netvanguard.core.SoloDifficulty;
 import com.netvanguard.net.Peer;
 import com.netvanguard.net.RelayListener;
 
@@ -9,9 +10,12 @@ public interface Navigator {
 
     void startSolo();
 
+    void startSolo(SoloDifficulty difficulty);
+
     void showHostLobby();
 
     void showJoinLobby();
+    void showLeaderboard();
 
     /**
      * Called once the opponent is connected. The new screen must call relay.setTarget(...)

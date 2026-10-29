@@ -11,6 +11,7 @@ import com.netvanguard.net.Peer;
 import com.netvanguard.net.Protocol;
 import com.netvanguard.net.RelayListener;
 import com.netvanguard.core.ScoreBoard;
+import com.netvanguard.core.SoloDifficulty;
 import com.netvanguard.core.ScoreStore;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -25,6 +26,7 @@ import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.image.Image;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
@@ -49,7 +51,7 @@ public class GameScreen extends StackPane {
 
     private static final double CELL = 48;
     private static final double PREVIEW = 80;
-    private static final Color BOARD_BG = Color.web("#1f2937");
+    private static final Color BOARD_BG = Color.web("#fffaf5");
     private static final double OPP_CELL = 24;          // size of one cell in the opponent's small board
     private static final int MAX_INCOMING_GARBAGE = 30; // ignore absurd GARBAGE values
 
@@ -77,7 +79,9 @@ public class GameScreen extends StackPane {
 
     // Scoreboard (solo only; scoreBoard is null online)
     private final ScoreBoard scoreBoard;
-    private final Path scoreFile = ScoreStore.defaultPath();
+    private final Path scoreFile;
+    private final SoloDifficulty difficulty;
+    private int soloTicks;
     private boolean scoreRecorded;
     private final ScoreboardView scoreboardView = new ScoreboardView();
     private final Label rankLabel = label("", 18);
@@ -100,8 +104,19 @@ public class GameScreen extends StackPane {
             if (lastTickNanos == 0) {
                 lastTickNanos = now;
             }
-            if (!isMatchOver() && now - lastTickNanos >= game.tickMillis() * 1_000_000L) {
+            long interval = online ? game.tickMillis()
+                    : Math.max(90, Math.round(game.tickMillis() * difficulty.speedMultiplier()));
+            if (!isMatchOver() && now - lastTickNanos >= interval * 1_000_000L) {
                 game.tick();
+                if (!online) {
+                    soloTicks++;
+                    int waveEvery = difficulty.stoneWaveTicks();
+                    if (waveEvery > 0 && soloTicks % waveEvery == 0) {
+                        // Stones queue until the next drop, just like incoming multiplayer garbage.
+                        game.receiveGarbage(difficulty.stonesPerWave());
+                        Sounds.play(Sounds.Effect.INCOMING);
+                    }
+                }
                 lastTickNanos = now;
             }
             if (online) {
@@ -118,8 +133,14 @@ public class GameScreen extends StackPane {
 
     /** peer and relay are null in solo mode. nav may be null (then there is no Back button). */
     public GameScreen(String mode, Peer peer, RelayListener relay, Navigator nav) {
+        this(mode, peer, relay, nav, SoloDifficulty.MEDIUM);
+    }
+
+    public GameScreen(String mode, Peer peer, RelayListener relay, Navigator nav, SoloDifficulty difficulty) {
         this.peer = peer;
+        this.difficulty = difficulty == null ? SoloDifficulty.MEDIUM : difficulty;
         online = peer != null;
+        scoreFile = online ? null : ScoreStore.defaultPath(this.difficulty);
         scoreBoard = online ? null : ScoreStore.load(scoreFile);
 
         // The game reports what happens; here we turn that into network messages.
@@ -157,12 +178,12 @@ public class GameScreen extends StackPane {
         setStyle(Theme.BACKGROUND);
 
         Label modeLabel = label("Mode: " + mode, 14);
-        modeLabel.setTextFill(Color.web("#9ca3af"));
-        statusLabel.setTextFill(Color.web("#9ca3af"));
-        chainLabel.setTextFill(Color.web("#fbbf24"));
-        garbageLabel.setTextFill(Color.web("#f87171"));
+        modeLabel.setTextFill(Color.web("#9a6b83"));
+        statusLabel.setTextFill(Color.web("#9a6b83"));
+        chainLabel.setTextFill(Color.web("#b7791f"));
+        garbageLabel.setTextFill(Color.web("#c2415d"));
         controlsLabel.setText(controlsText());
-        controlsLabel.setTextFill(Color.web("#9ca3af"));
+        controlsLabel.setTextFill(Color.web("#9a6b83"));
 
         VBox side = new VBox(14, modeLabel, statusLabel, label("NEXT", 18), preview,
                 scoreLabel, chainLabel, garbageLabel, controlsLabel);
@@ -170,14 +191,14 @@ public class GameScreen extends StackPane {
         side.setPrefWidth(150);
         side.getChildren().add(powerPanel);
         if (!online) {
-            bestLabel.setTextFill(Color.web("#fbbf24"));
+            bestLabel.setTextFill(Color.web("#b7791f"));
             updateBest();
             scoreboardView.show(scoreBoard.getEntries(), 0);
             side.getChildren().add(side.getChildren().indexOf(scoreLabel) + 1, bestLabel);
         }
 
         if (online) {
-            sentLabel.setTextFill(Color.web("#34d399"));
+            sentLabel.setTextFill(Color.web("#26856b"));
             side.getChildren().add(side.getChildren().indexOf(garbageLabel) + 1, sentLabel);
         }
 
@@ -199,8 +220,8 @@ public class GameScreen extends StackPane {
         if (online) {
             // The opponent's board, drawn small on the left from their STATE messages.
             Label opponentTitle = label("OPPONENT", 14);
-            opponentTitle.setTextFill(Color.web("#9ca3af"));
-            opponentScoreLabel.setTextFill(Color.web("#9ca3af"));
+            opponentTitle.setTextFill(Color.web("#9a6b83"));
+            opponentScoreLabel.setTextFill(Color.web("#9a6b83"));
             VBox opponentBox = new VBox(10, opponentTitle, opponentBoard, opponentScoreLabel);
             opponentBox.setPadding(new Insets(15, 0, 15, 15));
             layout.setLeft(opponentBox);
@@ -225,7 +246,7 @@ public class GameScreen extends StackPane {
         }
         gameOverBox.setAlignment(Pos.CENTER);
         gameOverBox.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
-        gameOverBox.setStyle("-fx-background-color: rgba(0, 0, 0, 0.75);");
+        gameOverBox.setStyle("-fx-background-color: rgba(255, 248, 243, 0.94); -fx-background-radius: 22;");
         gameOverBox.setVisible(false);
 
         getChildren().addAll(layout, gameOverBox);
@@ -353,7 +374,7 @@ public class GameScreen extends StackPane {
         lastTickNanos = 0;
         lastSentState = null;
         statusLabel.setText("Opponent connected");
-        statusLabel.setTextFill(Color.web("#9ca3af"));
+        statusLabel.setTextFill(Color.web("#9a6b83"));
     }
 
     private void showStatus(String text) {
@@ -407,6 +428,7 @@ public class GameScreen extends StackPane {
         }
         game = new Game(events);
         scoreRecorded = false;
+        soloTicks = 0;
         lastTickNanos = 0;
     }
 
@@ -415,12 +437,23 @@ public class GameScreen extends StackPane {
     /** Called once when a solo game ends: adds the score, saves the file, updates the table. */
     private void recordScore() {
         scoreRecorded = true;
-        int rank = scoreBoard.add(game.getScore(), LocalDate.now());
+        int rank = 0;
+        if (scoreBoard.qualifies(game.getScore())) {
+            TextInputDialog dialog = new TextInputDialog("Player");
+            dialog.setTitle("Save your score");
+            dialog.setHeaderText("Nice run! Your score is " + game.getScore());
+            dialog.setContentText("Enter your name for the " + difficulty.label() + " leaderboard:");
+            dialog.getEditor().setPromptText("Your name");
+            String playerName = dialog.showAndWait().orElse("Player").trim().replace(",", " ");
+            if (playerName.isBlank()) playerName = "Player";
+            if (playerName.length() > 18) playerName = playerName.substring(0, 18);
+            rank = scoreBoard.add(playerName, game.getScore(), LocalDate.now());
+        }
         if (rank > 0) {
             try {
                 ScoreStore.save(scoreFile, scoreBoard);
             } catch (IOException e) {
-                // could not save the file; the score still shows for this session
+                showStatus("Could not save leaderboard to disk");
             }
         }
         rankLabel.setText(rank == 1 ? "New high score!"
@@ -431,7 +464,7 @@ public class GameScreen extends StackPane {
 
     private void updateBest() {
         List<ScoreBoard.Entry> entries = scoreBoard.getEntries();
-        bestLabel.setText("Best: " + (entries.isEmpty() ? 0 : entries.get(0).score()));
+        bestLabel.setText(difficulty.label() + " best: " + (entries.isEmpty() ? 0 : entries.get(0).score()));
     }
 
     // ---------- Drawing ----------
@@ -486,7 +519,7 @@ public class GameScreen extends StackPane {
         double h = opponentBoard.getHeight();
         g.setFill(BOARD_BG);
         g.fillRect(0, 0, w, h);
-        g.setFill(Color.web("#7f1d1d", 0.45)); // top row = danger zone
+        g.setFill(Color.web("#fda4af", 0.32)); // top row = danger zone
         g.fillRect(0, 0, w, OPP_CELL);
         for (int r = 0; r < Grid.ROWS; r++) {
             for (int c = 0; c < Grid.COLS; c++) {
@@ -505,10 +538,10 @@ public class GameScreen extends StackPane {
 
         g.setFill(BOARD_BG);
         g.fillRect(0, 0, w, h);
-        g.setFill(Color.web("#7f1d1d", 0.45)); // top row = danger zone
+        g.setFill(Color.web("#fda4af", 0.32)); // top row = danger zone
         g.fillRect(0, 0, w, CELL);
 
-        g.setStroke(Color.web("#374151"));
+        g.setStroke(Color.web("#ead7e2"));
         g.setLineWidth(1);
         for (int c = 1; c < Grid.COLS; c++) {
             g.strokeLine(c * CELL, 0, c * CELL, h);
@@ -581,7 +614,7 @@ public class GameScreen extends StackPane {
 
     private static Label label(String text, double size) {
         Label l = new Label(text);
-        l.setTextFill(Color.WHITE);
+        l.setTextFill(Color.web("#60445a"));
         l.setFont(Font.font("System", FontWeight.BOLD, size));
         l.setWrapText(true);
         return l;

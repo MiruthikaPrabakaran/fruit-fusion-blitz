@@ -17,10 +17,13 @@ public class MenuScreen extends VBox {
         setStyle(Theme.BACKGROUND);
 
         Label title = Theme.title("Fruit Fusion Blitz");
-        Label subtitle = Theme.text("NetVanguard: merge fruits, flood your opponent's grid.");
+        Label subtitle = Theme.text("A little fruit chaos, a lot of satisfying merges.");
 
         Button solo = Theme.button("Solo");
         solo.setOnAction(e -> nav.startSolo());
+
+        Button leaderboard = Theme.button("Leaderboard");
+        leaderboard.setOnAction(e -> nav.showLeaderboard());
 
         Button host = Theme.button("Host game");
         host.setOnAction(e -> nav.showHostLobby());
@@ -31,6 +34,6 @@ public class MenuScreen extends VBox {
         Button quit = Theme.secondaryButton("Quit");
         quit.setOnAction(e -> Platform.exit());
 
-        getChildren().addAll(title, subtitle, solo, host, join, quit);
+        getChildren().addAll(title, subtitle, solo, leaderboard, host, join, quit);
     }
 }

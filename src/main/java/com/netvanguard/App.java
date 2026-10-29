@@ -1,10 +1,13 @@
 package com.netvanguard;
 
+import com.netvanguard.core.SoloDifficulty;
 import com.netvanguard.net.Peer;
 import com.netvanguard.net.RelayListener;
 import com.netvanguard.ui.HostLobbyScreen;
 import com.netvanguard.ui.JoinLobbyScreen;
 import com.netvanguard.ui.MenuScreen;
+import com.netvanguard.ui.LeaderboardScreen;
+import com.netvanguard.ui.SoloModeScreen;
 import com.netvanguard.ui.Navigator;
 import com.netvanguard.ui.GameScreen;
 import javafx.application.Application;
@@ -60,7 +63,14 @@ public class App extends Application implements Navigator {
     @Override
     public void startSolo() {
         restoreBaseSize();
-        scene.setRoot(new GameScreen("SOLO", null, null, this));
+        scene.setRoot(new SoloModeScreen(this));
+    }
+
+    @Override
+    public void startSolo(SoloDifficulty difficulty) {
+        restoreBaseSize();
+        scene.setRoot(new GameScreen("SOLO · " + difficulty.label().toUpperCase(),
+                null, null, this, difficulty));
     }
 
     @Override
@@ -73,6 +83,12 @@ public class App extends Application implements Navigator {
     public void showJoinLobby() {
         restoreBaseSize();
         scene.setRoot(new JoinLobbyScreen(this));
+    }
+
+    @Override
+    public void showLeaderboard() {
+        restoreBaseSize();
+        scene.setRoot(new LeaderboardScreen(this));
     }
 
     @Override

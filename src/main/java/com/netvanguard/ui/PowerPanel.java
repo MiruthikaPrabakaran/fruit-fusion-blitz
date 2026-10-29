@@ -16,9 +16,9 @@ import javafx.util.Duration;
  */
 public class PowerPanel extends VBox {
 
-    private static final Color ON = Color.WHITE;
-    private static final Color OFF = Color.web("#6b7280");
-    private static final Color GOLD = Color.web("#fbbf24");
+    private static final Color ON = Color.web("#60445a");
+    private static final Color OFF = Color.web("#b49cab");
+    private static final Color GOLD = Color.web("#b7791f");
 
     private final Supplier<Game> game;
     private final Label burstLabel = label("", 14);
