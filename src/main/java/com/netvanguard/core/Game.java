@@ -3,7 +3,7 @@ package com.netvanguard.core;
 import java.util.Random;
 
 /**
- * One player's game: the grid, the current and next item, the score and the garbage queue.
+ * One player's game: the grid, the current and next item, the score, the garbage queue and the powers.
  *
  * Pure logic: no JavaFX and nothing from the net package. The outside world is told what
  * happened through {@link GameEvents}:
@@ -12,7 +12,7 @@ import java.util.Random;
  *   onGameOver()           - my grid overflowed (called once)
  * The opponent's stones come in through receiveGarbage(count).
  *
- * Events fire on whichever thread calls tick()/hardDrop(). The net code must hop threads
+ * Events fire on whichever thread calls tick()/hardDrop()/useBurst(). The net code must hop threads
  * itself (for example Platform.runLater) if it needs to.
  */
 public class Game {
@@ -34,6 +34,8 @@ public class Game {
     private final Grid grid = new Grid();
     private final Random rng;
     private final GameEvents events;
+    private final Powers powers = new Powers();
+    private int burstsUsed;
 
     private FallingItem current;
     private Fruit next;
@@ -99,6 +101,49 @@ public class Game {
         lockCurrent();
     }
 
+    // ---------- Powers ----------
+
+    /**
+     * BURST: pops every cherry and strawberry on the grid, drops what is left and resolves any chain.
+     * Returns false (and keeps the charge) if there is no charge or nothing small to pop.
+     */
+    public boolean useBurst() {
+        if (state != State.RUNNING || powers.getBursts() == 0) {
+            return false;
+        }
+        Powers.BurstResult burst = Powers.burst(grid);
+        if (burst.count() == 0) {
+            return false;
+        }
+        powers.spendBurst();
+        burstsUsed++;
+        grid.applyGravity();
+        addScore(burst.points());
+        settleMerges();
+        return true;
+    }
+
+    /** SWAP: changes the NEXT fruit to the next kind in SPAWN_POOL. Returns false if no charge is left. */
+    public boolean useSwap() {
+        if (state != State.RUNNING || !powers.spendSwap()) {
+            return false;
+        }
+        int index = 0;
+        for (int i = 0; i < SPAWN_POOL.length; i++) {
+            if (SPAWN_POOL[i] == next) {
+                index = i;
+            }
+        }
+        next = SPAWN_POOL[(index + 1) % SPAWN_POOL.length];
+        return true;
+    }
+
+    public int getBursts() { return powers.getBursts(); }
+    public int getSwaps() { return powers.getSwaps(); }
+
+    /** How many bursts have been used this game (lets the UI notice a burst happened). */
+    public int getBurstsUsed() { return burstsUsed; }
+
     // ---------- Garbage ----------
 
     /** The opponent sent stones. They land after my next drop. */
@@ -130,21 +175,7 @@ public class Game {
         current.lockInto(grid);
         current = null;
 
-        lastResult = MergeResolver.resolve(grid);
-        int points = Scoring.points(lastResult);
-        if (points > 0) {
-            score += points;
-            events.onScoreChanged(score);
-        }
-
-        // My combo first cancels stones that were about to land on me.
-        int earned = Scoring.garbageFor(lastResult);
-        int cancelled = Math.min(earned, pendingGarbage);
-        pendingGarbage -= cancelled;
-        int toSend = earned - cancelled;
-        if (toSend > 0) {
-            events.onGarbageSent(toSend);
-        }
+        settleMerges();
 
         int incoming = Math.min(pendingGarbage, MAX_GARBAGE_PER_DROP);
         if (incoming > 0) {
@@ -157,6 +188,32 @@ public class Game {
         } else {
             spawnNext();
         }
+    }
+
+    /** Resolves merges and chains, then scores them and handles the garbage they earn. */
+    private void settleMerges() {
+        lastResult = MergeResolver.resolve(grid);
+        addScore(Scoring.points(lastResult));
+        powers.earnFromChain(lastResult.chainLength());
+
+        // My combo first cancels stones that were about to land on me.
+        int earned = Scoring.garbageFor(lastResult);
+        int cancelled = Math.min(earned, pendingGarbage);
+        pendingGarbage -= cancelled;
+        int toSend = earned - cancelled;
+        if (toSend > 0) {
+            events.onGarbageSent(toSend);
+        }
+    }
+
+    private void addScore(int points) {
+        if (points <= 0) {
+            return;
+        }
+        int before = score;
+        score += points;
+        powers.earnFromScore(before, score);
+        events.onScoreChanged(score);
     }
 
     private void spawnNext() {

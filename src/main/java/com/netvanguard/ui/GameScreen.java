@@ -85,6 +85,8 @@ public class GameScreen extends StackPane {
 
     private final Canvas board = new Canvas(Grid.COLS * CELL, Grid.ROWS * CELL);
     private final Canvas preview = new Canvas(PREVIEW, PREVIEW);
+    private final PowerPanel powerPanel = new PowerPanel(() -> game);
+    private final EffectsLayer effects = new EffectsLayer(() -> game, board, CELL);
     private final Label statusLabel = label("", 14);
     private final Label scoreLabel = label("Score: 0", 18);
     private final Label chainLabel = label("", 18);
@@ -166,6 +168,7 @@ public class GameScreen extends StackPane {
                 scoreLabel, chainLabel, garbageLabel, controlsLabel);
         side.setPadding(new Insets(15));
         side.setPrefWidth(150);
+        side.getChildren().add(powerPanel);
         if (!online) {
             bestLabel.setTextFill(Color.web("#fbbf24"));
             updateBest();
@@ -189,7 +192,9 @@ public class GameScreen extends StackPane {
         }
 
         BorderPane layout = new BorderPane();
-        layout.setCenter(board);
+        StackPane boardStack = new StackPane(board, effects);
+        boardStack.setMaxSize(Grid.COLS * CELL, Grid.ROWS * CELL);
+        layout.setCenter(boardStack);
         layout.setRight(side);
         if (online) {
             // The opponent's board, drawn small on the left from their STATE messages.
@@ -200,7 +205,7 @@ public class GameScreen extends StackPane {
             opponentBox.setPadding(new Insets(15, 0, 15, 15));
             layout.setLeft(opponentBox);
         }
-        BorderPane.setMargin(board, new Insets(15));
+        BorderPane.setMargin(boardStack, new Insets(15));
 
         resultTitle.setTextFill(Color.web("#f87171"));
         rankLabel.setTextFill(Color.web("#fbbf24"));
@@ -386,6 +391,8 @@ public class GameScreen extends StackPane {
                 lastTickNanos = 0; // restart the tick timer so the item does not drop twice in a row
             }
             case SPACE -> game.hardDrop();
+            case B -> powerPanel.useBurst();
+            case N -> powerPanel.useSwap();
             case R -> restart();
             default -> {
                 return;
@@ -432,6 +439,7 @@ public class GameScreen extends StackPane {
     private void render() {
         drawBoard();
         drawPreview();
+        powerPanel.refresh();
 
         scoreLabel.setText("Score: " + game.getScore());
         int chain = game.getLastResult().chainLength();

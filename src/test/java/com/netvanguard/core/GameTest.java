@@ -2,6 +2,7 @@ package com.netvanguard.core;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.Arrays;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
 
@@ -150,5 +151,120 @@ class GameTest {
         game.hardDrop();
         game.moveLeft();
         assertEquals(items, game.getGrid().countItems());
+    }
+
+    // ---------- Powers ----------
+
+    @Test
+    void startsWithPowerCharges() {
+        Game game = newGame(new Recorder());
+        assertEquals(Powers.START_BURSTS, game.getBursts());
+        assertEquals(Powers.START_SWAPS, game.getSwaps());
+    }
+
+    @Test
+    void burstPopsOnlySmallFruitsAndSpendsACharge() {
+        Recorder rec = new Recorder();
+        Game game = newGame(rec);
+        Grid g = game.getGrid();
+        g.set(9, 0, Fruit.CHERRY);
+        g.set(9, 2, Fruit.STRAWBERRY);
+        g.set(9, 4, Fruit.GRAPE);
+        g.set(9, 5, Fruit.STONE);
+        assertTrue(game.useBurst());
+        assertEquals(2, g.countItems());
+        assertEquals(Powers.START_BURSTS - 1, game.getBursts());
+        assertEquals(30, game.getScore());
+        assertEquals(30, rec.lastScore);
+    }
+
+    @Test
+    void burstsUsedCountsSuccessfulBursts() {
+        Game game = newGame(new Recorder());
+        assertEquals(0, game.getBurstsUsed());
+        game.getGrid().set(9, 0, Fruit.CHERRY);
+        game.useBurst();
+        assertEquals(1, game.getBurstsUsed());
+    }
+
+    @Test
+    void burstWithNothingSmallToPopKeepsTheCharge() {
+        Game game = newGame(new Recorder());
+        game.getGrid().set(9, 0, Fruit.GRAPE);
+        assertFalse(game.useBurst());
+        assertEquals(Powers.START_BURSTS, game.getBursts());
+        assertEquals(1, game.getGrid().countItems());
+    }
+
+    @Test
+    void burstNeedsACharge() {
+        Game game = newGame(new Recorder());
+        game.getGrid().set(9, 0, Fruit.CHERRY);
+        assertTrue(game.useBurst());
+        game.getGrid().set(9, 0, Fruit.CHERRY);
+        assertFalse(game.useBurst());
+        assertEquals(Fruit.CHERRY, game.getGrid().get(9, 0));
+    }
+
+    @Test
+    void fruitsFallingAfterABurstCanStartAChain() {
+        Game game = newGame(new Recorder());
+        Grid g = game.getGrid();
+        g.set(9, 0, Fruit.CHERRY);
+        g.set(8, 0, Fruit.GRAPE); // falls into the gap and meets the grape next to it
+        g.set(9, 1, Fruit.GRAPE);
+        assertTrue(game.useBurst());
+        assertEquals(Fruit.ORANGE, g.get(9, 0));
+        assertEquals(1, g.countItems());
+        assertEquals(1, game.getLastResult().chainLength());
+        assertEquals(10 + 3 * 10 * 2, game.getScore());
+    }
+
+    @Test
+    void aChainEarnsABurstCharge() {
+        Game game = gameAboutToChain(new Recorder());
+        game.hardDrop();
+        assertEquals(Powers.START_BURSTS + 1, game.getBursts());
+    }
+
+    @Test
+    void swapCyclesTheNextFruitAndLeavesTheFallingOneAlone() {
+        Game game = newGame(new Recorder());
+        Fruit falling = game.getCurrent().getFruit();
+        int index = Arrays.asList(Game.SPAWN_POOL).indexOf(game.getNext());
+        assertTrue(game.useSwap());
+        assertEquals(Game.SPAWN_POOL[(index + 1) % Game.SPAWN_POOL.length], game.getNext());
+        assertEquals(falling, game.getCurrent().getFruit());
+        assertEquals(Powers.START_SWAPS - 1, game.getSwaps());
+    }
+
+    @Test
+    void swapStopsWhenOutOfCharges() {
+        Game game = newGame(new Recorder());
+        for (int i = 0; i < Powers.START_SWAPS; i++) {
+            assertTrue(game.useSwap());
+        }
+        Fruit before = game.getNext();
+        assertFalse(game.useSwap());
+        assertEquals(before, game.getNext());
+    }
+
+    @Test
+    void swappedFruitIsTheOneThatSpawnsNext() {
+        Game game = newGame(new Recorder());
+        game.useSwap();
+        Fruit chosen = game.getNext();
+        game.hardDrop();
+        assertEquals(chosen, game.getCurrent().getFruit());
+    }
+
+    @Test
+    void powersDoNothingAfterGameOver() {
+        Game game = newGame(new Recorder());
+        game.getGrid().set(0, 0, Fruit.STONE);
+        game.hardDrop();
+        game.getGrid().set(9, 0, Fruit.CHERRY);
+        assertFalse(game.useBurst());
+        assertFalse(game.useSwap());
     }
 }
